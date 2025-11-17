@@ -1,0 +1,60 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Employee Dashboard</title>
+  <link rel="stylesheet" href="employe.css">
+  <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/font-awesome/6.4.0/css/all.min.css"/>
+</head>
+<body>
+
+  <!-- SIDEBAR -->
+  <div class="sidebar">
+
+    <div class="top-section">
+      <h2>Employee</h2>
+    </div>
+
+    <div class="menu">
+      <div class="menu-item active" data-page="tasks">
+        <i class="fa-solid fa-list-check"></i> My Tasks
+      </div>
+    </div>
+
+    <!-- LOGOUT DI BAWAH -->
+    <div class="logout-section">
+      <button class="logout-btn" onclick="logout()">
+        <i class="fa-solid fa-right-from-bracket"></i> Logout
+      </button>
+    </div>
+
+  </div>
+
+  <!-- MAIN CONTENT -->
+  <div class="main-content">
+
+    <!-- HEADER -->
+    <div class="header">
+      <h1>My Tasks</h1>
+      <div class="date-box" id="currentDate"></div>
+    </div>
+
+    <!-- TASK LIST -->
+    <div id="contentArea">
+      <div class="task-list" id="taskList"></div>
+    </div>
+
+  </div>
+
+  <script src="employe.js"></script>
+  <script>
+    function showDate() {
+      const date = new Date();
+      const options = { weekday: "long", year: "numeric", month: "long", day: "numeric" };
+      document.getElementById("currentDate").innerText = date.toLocaleDateString("id-ID", options);
+    }
+    showDate();
+  </script>
+
+</body>
+</html>
