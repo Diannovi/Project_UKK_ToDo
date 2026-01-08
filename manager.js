@@ -1,660 +1,507 @@
+// ---------------------
+// Manager JS (refactored)
+// ---------------------
+
 const sidebar = document.getElementById("sidebar");
 const menuList = document.getElementById("menuList");
 const pageTitle = document.getElementById("pageTitle");
 const content = document.getElementById("content");
+const toggleSidebarBtn = document.getElementById("toggleSidebar");
+const logoutBtn = document.getElementById("logoutBtn");
 
-
+// --- default sample tasks (used once if no tasks exist) ---
 const defaultTasks = [
-  {
-    id: 1,
-    name: "Design Homepage",
-    description: "Create a modern homepage design.",
-    assigned: "employee@mail.com",
-    status: "Pending",
-    deadline: "2023-08-15"
-  },
-  {
-    id: 2,
-    name: "Update Website",
-    description: "Update the website with new features.",
-    assigned: "employee@mail.com",
-    status: "Pending",
-    deadline: "2023-08-20"
-  },
-  {
-    id: 3,
-    name: "Fix Bugs",
-    description: "Resolve reported bugs from users.",
-    assigned: "employee@mail.com",
-    status: "On Progress",
-    deadline: "2023-08-25"
-  },
-  {
-    id: 4,
-    name: "Write Documentation",
-    description: "Document the new features added.",
-    assigned: "employee@mail.com",
-    status: "Done",
-    deadline: "2023-08-30"
-  },
-  {
-    id: 5,
-    name: "Deploy to Production",
-    description: "Deploy the application to production environment.",
-    assigned: "employee@mail.com",
-    status: "Pending",
-    deadline: "2023-09-05"
-  }
+  { id: 1, name: "Design Homepage", description: "Create a modern homepage design.", assigned: "employee@mail.com", status: "Pending", deadline: "2023-08-15" },
+  { id: 2, name: "Update Website", description: "Update the website with new features.", assigned: "employee@mail.com", status: "Pending", deadline: "2023-08-20" },
+  { id: 3, name: "Fix Bugs", description: "Resolve reported bugs from users.", assigned: "employee@mail.com", status: "On Progress", deadline: "2023-08-25" },
+  { id: 4, name: "Write Documentation", description: "Document the new features added.", assigned: "employee@mail.com", status: "Done", deadline: "2023-08-30" },
+  { id: 5, name: "Deploy to Production", description: "Deploy the application to production environment.", assigned: "employee@mail.com", status: "Pending", deadline: "2023-09-05" }
 ];
 
-const currentUser = JSON.parse(localStorage.getItem("user"));
-if (!currentUser) window.location.href = "index.html";
-
-function setActiveMenu(page) {
-  document.querySelectorAll(".menu-item").forEach(item => {
-    item.classList.toggle("active", item.dataset.page === page);
-  });
+// --- require login check ---
+const currentUser = JSON.parse(localStorage.getItem("user") || "null");
+if (!currentUser) {
+  // For development convenience: if no user stored, create a manager user
+  // REMOVE this block in production if you don't want auto-login dev behavior.
+  localStorage.setItem("user", JSON.stringify({ id: 1, email: "manager@mail.com", role: { id: 1, name: "Manager" } }));
+  localStorage.setItem("users", JSON.stringify([
+    { id: 1, email: "manager@mail.com", role: { id: 1, name: "Manager" } },
+    { id: 2, email: "employee@mail.com", role: { id: 2, name: "Employee" } }
+  ]));
+  localStorage.setItem("tasks", JSON.stringify(defaultTasks));
+  window.location.reload();
 }
 
-function loadPage(page) {
-  document.getElementById("pageTitle").textContent = page;
-  document.getElementById("content").innerHTML = `<h2>${page} Loaded</h2>`;
-}
-
-
-// === ROLE-BASED MENU ===
-if (currentUser.role.id === 1) {
-  // MANAGER MENU
-  document.addEventListener("DOMContentLoaded", () => {
-
-  const menus = [
-    { name: "Dashboard", page: "dashboard" },
-    { name: "Manage Employee", page: "manageEmployee" },
-    { name: "Manage Task", page: "managerTask" }
-  ];
-  menus.forEach(m => {
-  const div = document.createElement("div");
-  div.className = "menu-item";
-  div.dataset.page = m.page;
-  div.textContent = m.name;
-  menuList.appendChild(div);
-});
-
-  // GENERATE MENU
-  menuList.innerHTML = menus
-    .map(
-      (m) => `
-        <div class="menu-item" data-page="${m.page}">
-          ${m.name}
-        </div>
-      `
-    )
-    .join("");
-
-  // EVENT MENU CLICK
-  document.querySelectorAll(".menu-item").forEach((item) => {
-    item.addEventListener("click", () => {
-      document.querySelectorAll(".menu-item").forEach(i => i.classList.remove("active"));
-      item.classList.add("active");
-
-      // ganti page title
-      document.getElementById("pageTitle").textContent = item.textContent;
-
-      // load halaman (kamu isi script-nya sendiri)
-      loadPage(item.dataset.page);
-    });
-  });
-});
-
-
-// === SIDEBAR LINK CLICK HANDLER ===
-const allLinks = menuList.querySelectorAll("a");
-allLinks.forEach(link => {
-  link.addEventListener("click", () => {
-    allLinks.forEach(a => a.classList.remove("active"));
-    link.classList.add("active");
-    const page = link.getAttribute("data-page");
-    loadPage(page);
-  });
-});
-
-// === LOGOUT ===
-function logout() {
-  localStorage.removeItem("user");
-  window.location.href = "index.html";
-}
-
-// === TASK STORAGE DATA ===
-let tasks = JSON.parse(localStorage.getItem("tasks")) || [];
-if (tasks.length === 0) {
+// --- ensure tasks exist ---
+let tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+if (!tasks || tasks.length === 0) {
   tasks = defaultTasks;
   localStorage.setItem("tasks", JSON.stringify(tasks));
 }
 
-// === PAGE LOADER ===
+// --- role based menus ---
+const managerMenus = [
+  { name: "Dashboard", page: "dashboard", icon: "📊" },
+  { name: "Manage Employee", page: "manageEmployee", icon: "👥" },
+  { name: "Manage Task", page: "managerTask", icon: "🗂️" },
+  { name: "Employee Reports", page: "employeereport", icon: "📄" }
+];
+
+function buildMenu() {
+  menuList.innerHTML = managerMenus.map(m => {
+    return `<div class="menu-item" data-page="${m.page}">
+              <span class="mi-icon">${m.icon}</span>
+              <span class="mi-label">${m.name}</span>
+            </div>`;
+  }).join("");
+
+  // attach click handlers
+  document.querySelectorAll(".menu-item").forEach(item => {
+    item.addEventListener("click", () => {
+      document.querySelectorAll(".menu-item").forEach(i => i.classList.remove("active"));
+      item.classList.add("active");
+      const page = item.dataset.page;
+      loadPage(page);
+    });
+  });
+}
+
+// --- toggle sidebar collapse ---
+toggleSidebarBtn.addEventListener("click", () => {
+  const collapsed = sidebar.classList.toggle("collapsed");
+  if (collapsed) {
+    sidebar.style.width = "72px";
+    document.querySelector(".main-content").style.marginLeft = "72px";
+  } else {
+    sidebar.style.width = "260px";
+    document.querySelector(".main-content").style.marginLeft = "260px";
+  }
+});
+
+// --- logout ---
+logoutBtn.addEventListener("click", () => {
+  localStorage.removeItem("user");
+  window.location.href = "index.html";
+});
+
+// --- unified loadPage ---
 function loadPage(page) {
+  // only manager allowed to see these pages in our simplified logic
   if (currentUser.role.id === 1) {
     if (page === "dashboard") renderDashboard();
     else if (page === "manageEmployee") renderEmployeeList();
-    else if (page === "managerTask") renderManagerTask(); // ini typo harusnya "managerTask" bukan manageTask
-    // else if(page === "mangageTask") renderManageTask();
+    else if (page === "managerTask") renderManagerTask();
+    else if (page === "employeereport") renderEmployeeReports();
+    else renderDashboard();
   } else {
     renderEmployeeTask();
   }
 }
 
-// === DASHBOARD MANAGER ===
-// === DASHBOARD MANAGER ===
-const allTasks = JSON.parse(localStorage.getItem("tasks")) || [];
-console.log(allTasks);
-function renderDashboard() {
+// --- RENDER DASHBOARD ---
+function renderDashboard(){
   pageTitle.textContent = "Dashboard";
 
-  // Ambil data users dan tasks
-  const allUsers = JSON.parse(localStorage.getItem("users")) || [];
-  console.log(allTasks);
+  const allUsers = JSON.parse(localStorage.getItem("users") || "[]");
+  const employees = allUsers.filter(u => u.role?.id === 2);
 
-  const employees = allUsers.filter(u => u.role.id === 2);
-
+  const allTasks = JSON.parse(localStorage.getItem("tasks") || "[]");
   const totalTasks = allTasks.length;
   const pending = allTasks.filter(t => t.status === "Pending").length;
   const progress = allTasks.filter(t => t.status === "On Progress").length;
   const completed = allTasks.filter(t => t.status === "Done").length;
+  const lastTasks = allTasks.slice(-8).reverse();
 
-  // Ambil 5 task terakhir
-  
-  const lastTasks = allTasks.slice(-5).reverse();
-
-  // Render content
   content.innerHTML = `
-    <!-- DASHBOARD CARDS -->
     <div class="dashboard-cards">
       <div class="dash-card">
         <h3>Total Employees</h3>
-        <span class="count-blue">${employees.length}</span>
+        <span>${employees.length}</span>
       </div>
-
       <div class="dash-card">
         <h3>Total Tasks</h3>
-        <span class="count-orange">${totalTasks}</span>
+        <span>${totalTasks}</span>
       </div>
-
       <div class="dash-card">
         <h3>Completed Tasks</h3>
-        <span class="count-green">${completed}</span>
+        <span>${completed}</span>
       </div>
     </div>
 
-  <!-- TASK OVERVIEW -->
-<div class="task-overview">
-  <h3>Task Overview</h3>
-  <div class="task-overview-row">
-    <div class="tov-item">
-      <div class="tov-title">Pending</div>
-      <div class="tov-number tov-orange">${pending}</div>
+    <div class="task-overview">
+      <h3>Task Overview</h3>
+      <div class="task-overview-row">
+        <div class="tov-item"><div class="tov-title">Pending</div><div class="tov-number">${pending}</div></div>
+        <div class="tov-item"><div class="tov-title">In Progress</div><div class="tov-number">${progress}</div></div>
+        <div class="tov-item"><div class="tov-title">Done</div><div class="tov-number">${completed}</div></div>
+      </div>
     </div>
-    <div class="tov-item">
-      <div class="tov-title">On Progress</div>
-      <div class="tov-number tov-blue">${progress}</div>
-    </div>
-    <div class="tov-item">
-      <div class="tov-title">Done</div>
-      <div class="tov-number tov-green">${completed}</div>
-    </div>
-  </div>
-</div>
 
-
-    <!-- RECENT TASK TABLE -->
-   <div class="recent-task-table">
-  <h3>Recent Tasks</h3>
-  <table>
-    <thead>
-      <tr>
-        <th>Title</th>
-        <th>Assigned</th>
-          <th>Deadline</th>
-        <th>Status</th>
-             
-      </tr>
-    </thead>
-    <tbody id="recentBody">
-    </tbody>
-  </table>
-</div>
+    <div class="recent-task-table">
+      <h3>Recent Tasks</h3>
+      <table>
+        <thead>
+          <tr><th>Title</th><th>Assigned</th><th>Deadline</th><th>Status</th></tr>
+        </thead>
+        <tbody id="recentBody">
+          ${ lastTasks.map(t => `
+            <tr>
+              <td><strong>${escapeHtml(t.name)}</strong><div style="color:var(--muted);font-size:13px">${escapeHtml(t.description || '')}</div></td>
+              <td>${escapeHtml(t.assigned || '')}</td>
+              <td>${escapeHtml(t.deadline || '')}</td>
+              <td><span class="status-badge ${badgeClass(t.status)}">${escapeHtml(t.status)}</span></td>
+            </tr>
+          `).join("") }
+        </tbody>
+      </table>
+    </div>
   `;
-
-  // Render 5 task terakhir
-  const recentBody = document.getElementById("recentBody");
- recentBody.innerHTML = lastTasks
-  .map(
-    t => `
-      <tr>
-        <td>
-          <strong>${t.name}</strong><br>
-        </td>
-        <td>${t.assigned}</td>
-          <td>${t.deadline}</td>
-        <td>
-          <span class="status-badge ${
-            t.status === "Pending"
-              ? "badge-pending"
-              : t.status === "On Progress"
-              ? "badge-progress"
-              : "badge-done"
-          }">${t.status}</span>
-        </td>
-
-      </tr>
-    `
-  )
-  .join("");
 }
 
-
-
-
-// === EMPLOYEE MANAGEMENT ===
-function renderEmployeeList() {
+// --- MANAGE EMPLOYEE ---
+function renderEmployeeList(){
   pageTitle.textContent = "Manage Employee";
-
-  let allUsers = JSON.parse(localStorage.getItem("users")) || [];
-  let employees = allUsers.filter(u => u.role.id === 2);
+  let allUsers = JSON.parse(localStorage.getItem("users") || "[]");
+  let employees = allUsers.filter(u => u.role?.id === 2);
 
   content.innerHTML = `
-    <div class="card pretty-card">
-      <h3 class="card-title">Add New Employee</h3>
+  <div class="pretty-card" style="padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05); background-color:#fff;">
+    <h3 class="card-title" style="margin-bottom:16px; font-size:18px; color:#1a73e8;">Add New Employee</h3>
+    <form id="addEmployeeForm" class="pretty-form" style="display:flex; flex-direction:column; gap:12px;">
+      <input type="email" id="newEmpEmail" placeholder="Employee email..." required
+             style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; transition: border-color 0.2s;"
+             onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'" />
+      
+      <input type="text" id="newEmpPassword" placeholder="Default password..." value="12345" required
+             style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; transition: border-color 0.2s;"
+             onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'" />
+      
+      <button type="submit"
+              style="padding:10px; border-radius:8px; border:none; background-color:#1a73e8; color:white; font-weight:bold; cursor:pointer; transition: background 0.2s;"
+              onmouseover="this.style.backgroundColor='#1669c1'" onmouseout="this.style.backgroundColor='#1a73e8'">
+        + Add Employee
+      </button>
+    </form>
+  </div>
 
-      <form id="addEmployeeForm" class="pretty-form">
-        <input type="email" id="newEmpEmail" placeholder="Employee email..." required />
-        <input type="text" id="newEmpPassword" placeholder="Default password..." value="12345" required />
 
-        <button class="add-btn" type="submit">+ Add Employee</button>
-      </form>
-    </div>
-
-    <div class="card pretty-card" style="margin-top:20px;">
-      <h3 class="card-title">📋 Employee List</h3>
-
+    <div class="pretty-card" style="margin-top:16px;">
+      <h3 class="card-title">Employee List</h3>
       <div class="task-table-modern">
-        ${
-          employees.length > 0
-            ? employees
-                .map(
-                  emp => `
+        ${ employees.length > 0 ? employees.map(emp => `
           <div class="task-row">
-            <div class="task-cell">${emp.email}</div>
-
+            <div class="task-cell">${escapeHtml(emp.email)}</div>
+            <div class="task-cell"><span class="role-badge">Employee</span></div>
+            <div class="task-cell">${escapeHtml(emp.password || "12345")}</div>
             <div class="task-cell">
-              <span class="badge role-badge">Employee</span>
-            </div>
-
-            <div class="task-cell">${emp.password || "12345"}</div>
-
-            <div class="task-cell action-cell">
-              <button class="status-btn edit-emp" data-id="${emp.id}">✏️</button>
-              <button class="delete-btn del-emp" data-id="${emp.id}">🗑</button>
+              <button class="add-btn edit-emp" data-id="${emp.id}">✏️ Edit</button>
+              <button class="delete-btn del-emp" data-id="${emp.id}">🗑 Delete</button>
             </div>
           </div>
-        `
-                )
-                .join("")
-            : `<p class="empty">No employees found.</p>`
-        }
+        `).join("") : `<p class="empty">No employees found.</p>` }
       </div>
     </div>
   `;
 
-  // === ADD EMPLOYEE ===
+  // attach submit
   document.getElementById("addEmployeeForm").addEventListener("submit", e => {
     e.preventDefault();
+    const email = document.getElementById("newEmpEmail").value.trim();
+    const password = document.getElementById("newEmpPassword").value.trim();
+    if (!email) return alert("Email is required.");
 
-    const email = document.getElementById("newEmpEmail").value;
-    const password = document.getElementById("newEmpPassword").value;
-
-    allUsers.push({
-      id: Date.now(),
-      email,
-      password,
-      role: { id: 2, name: "Employee" }
-    });
-
+    allUsers.push({ id: Date.now(), email, password, role: { id: 2, name: "Employee" } });
     localStorage.setItem("users", JSON.stringify(allUsers));
-
     renderEmployeeList();
   });
 
-  // === DELETE EMPLOYEE ===
+  // delete
   document.querySelectorAll(".del-emp").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-
-      allUsers = allUsers.filter(u => u.id != id);
+      const id = Number(btn.dataset.id);
+      if (!confirm("Hapus employee ini?")) return;
+      allUsers = allUsers.filter(u => u.id !== id);
       localStorage.setItem("users", JSON.stringify(allUsers));
-
       renderEmployeeList();
     });
   });
 
-  // === EDIT EMPLOYEE (PROMPT) ===
+  // edit
   document.querySelectorAll(".edit-emp").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-      let user = allUsers.find(u => u.id == id);
-
+      const id = Number(btn.dataset.id);
+      const user = allUsers.find(u => u.id === id);
+      if (!user) return;
       const newEmail = prompt("New Email:", user.email);
       if (!newEmail) return;
-
-      const newPassword = prompt("New Password:", user.password);
+      const newPassword = prompt("New Password:", user.password || "");
       if (!newPassword) return;
-
       user.email = newEmail;
       user.password = newPassword;
-
       localStorage.setItem("users", JSON.stringify(allUsers));
-
       renderEmployeeList();
     });
   });
 }
 
+// --- MANAGER TASK VIEW ---
+function renderManagerTask() {
+  pageTitle.textContent = "Manage Task";
 
-  // // Add Employee Logic
-  // document.getElementById("addEmployeeForm").addEventListener("submit", e => {
-  //   e.preventDefault();
+  const allUsers = JSON.parse(localStorage.getItem("users") || "[]");
+  const employees = allUsers.filter(u => u.role?.id === 2);
 
-  //   const email = document.getElementById("newEmpEmail").value;
-  //   const pwd = document.getElementById("newEmpPassword").value;
-
-  //   allUsers.push({
-  //     id: Date.now(),
-  //     email,
-  //     password: pwd,
-  //     role: { id: 2, name: "Employee" }
-  //   });
-
-  //   localStorage.setItem("users", JSON.stringify(allUsers));
-
-  //   renderEmployeeList();
-  // });
-
-  // // Delete Action
-  // document.querySelectorAll(".delete-btn").forEach(btn => {
-  //   btn.addEventListener("click", e => {
-  //     const id = e.target.getAttribute("data-id");
-  //     allUsers = allUsers.filter(u => u.id != id);
-  //     localStorage.setItem("users", JSON.stringify(allUsers));
-  //     renderEmployeeList();
-  //   });
-  // });
-
-  // // Edit Action
-  // document.querySelectorAll(".edit-btn").forEach(btn => {
-  //   btn.addEventListener("click", e => {
-  //     const id = e.target.getAttribute("data-id");
-  //     const target = allUsers.find(u => u.id == id);
-
-  //     const newEmail = prompt("Edit Email:", target.email);
-  //     const newPass = prompt("Edit Password:", target.password);
-
-  //     if (newEmail) target.email = newEmail;
-  //     if (newPass) target.password = newPass;
-
-  //     localStorage.setItem("users", JSON.stringify(allUsers));
-  //     renderEmployeeList();
-  //   });
-  // });
-
-
-
-// === MANAGER TASK VIEW ===
-  function renderManagerTask() {
-  pageTitle.textContent = "Manager Task";
-
-  let allUsers = JSON.parse(localStorage.getItem("users")) || [];
-  let employees = allUsers.filter(u => u.role.id === 2);
+  tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 
   content.innerHTML = `
-    <div class="card pretty-card">
-      <h3 class="card-title">Add New Task</h3>
-
-      <form id="taskForm" class="pretty-form">
-  <input type="text" id="taskName" placeholder="Task title..." required />
-
-  <textarea id="taskDesc" placeholder="Task description..." required></textarea>
-
-  <input type="date" id="taskDeadline" required />
-
-  <select id="assignUser" required>
-    <option value="">Assign to employee</option>
-    ${employees.map(emp => `<option value="${emp.email}">${emp.email}</option>`).join("")}
-  </select>
-
-  <button class="add-btn" type="submit">+ Add Task</button>
-</form>
-
+    <!-- Ini bagian Add Task yang baru -->
+    <div class="pretty-card" style="padding:20px; border-radius:12px; box-shadow:0 2px 8px rgba(0,0,0,0.05); background-color:#fff;">
+      <h3 class="card-title" style="margin-bottom:16px; font-size:18px; color:#1a73e8;">Add New Task</h3>
+      <form id="taskForm" class="pretty-form" style="display:flex; flex-direction:column; gap:12px;">
+        <input type="text" id="taskName" placeholder="Task title..." required
+               style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; transition: border-color 0.2s;"
+               onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'" />
+        
+        <textarea id="taskDesc" placeholder="Task description..." required
+                  style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; min-height:80px; resize:none; transition: border-color 0.2s;"
+                  onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'"></textarea>
+        
+        <input type="date" id="taskDeadline" required
+               style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; transition: border-color 0.2s;"
+               onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'" />
+        
+        <select id="assignUser" required
+                style="padding:10px; border-radius:8px; border:1px solid #e6eefc; font-size:14px; width:100%; transition: border-color 0.2s;"
+                onfocus="this.style.borderColor='#1a73e8'" onblur="this.style.borderColor='#e6eefc'">
+          <option value="">Assign to employee</option>
+          ${ employees.map(emp => `<option value="${emp.email}">${emp.email}</option>`).join("") }
+        </select>
+        
+        <button type="submit"
+                style="padding:10px; border-radius:8px; border:none; background-color:#1a73e8; color:white; font-weight:bold; cursor:pointer; transition: background 0.2s;"
+                onmouseover="this.style.backgroundColor='#1669c1'" onmouseout="this.style.backgroundColor='#1a73e8'">
+          + Add Task
+        </button>
+      </form>
     </div>
 
-    <div class="card pretty-card" style="margin-top:20px;">
-      <h3 class="card-title">📋 Task List</h3>
-
-      <div class="task-table-modern">
-  ${
-    tasks.length > 0
-      ? tasks
-          .map(
-            t => `
-      <div class="task-row">
-        <div class="task-cell">
-          <strong>${t.name}</strong><br>
-          <small>${t.description}</small><br>
-          <small>Deadline: ${t.deadline}</small>
+  <div class="pretty-card" style="margin-top:16px;">
+    <h3 class="card-title">Task List</h3>
+    <div class="task-table-modern" style="border-collapse: collapse; width: 100%;">
+      ${ tasks.length > 0 ? tasks.map(t => `
+        <div class="task-row" style="display: flex; justify-content: space-between; align-items: center; padding: 12px 8px; border-bottom: 1px solid #e0e0e0; transition: background 0.2s;">
+          <div class="task-cell" style="flex: 3;">
+            <strong>${escapeHtml(t.name)}</strong>
+            <div style="color:var(--muted); font-size:13px; margin-top:4px;">${escapeHtml(t.description)}</div>
+            <div style="font-size:12px; color:var(--muted); margin-top:6px;">Deadline: ${escapeHtml(t.deadline)}</div>
+          </div>
+          <div class="task-cell" style="flex: 2; text-align:center;">${escapeHtml(t.assigned)}</div>
+          <div class="task-cell" style="flex: 1; text-align:center;">
+            <span class="status-badge ${badgeClass(t.status)}">${escapeHtml(t.status)}</span>
+          </div>
+          <div class="task-cell" style="flex: 1; text-align:center;">
+            <button class="add-btn edit-task" data-id="${t.id}" style="margin-right:4px;">✏️</button>
+            <button class="delete-btn del-task" data-id="${t.id}">🗑</button>
+          </div>
         </div>
-
-        <div class="task-cell">${t.assigned}</div>
-
-        <div class="task-cell">
-          <span class="badge ${t.status.toLowerCase().replace(" ", "-")}">
-            ${t.status}
-          </span>
-        </div>
-
-        <div class="task-cell action-cell">
-          <button class="status-btn" data-id="${t.id}">✏️</button>
-          <button class="delete-btn" data-id="${t.id}">🗑</button>
-        </div>
-      </div>
-    `
-          )
-          .join("")
-      : `<p class="empty">No tasks yet.</p>`
-  }
-</div>
+      `).join("") : `<p class="empty" style="padding:12px; text-align:center;">No tasks yet.</p>` }
+    </div>
+  </div>
 `;
 
- // === ADD TASK ===
-document.getElementById("taskForm").addEventListener("submit", e => {
-  e.preventDefault();
-
-  const name = document.getElementById("taskName").value;
-  const assigned = document.getElementById("assignUser").value;
-  const description = document.getElementById("taskDesc").value;
-  const deadline = document.getElementById("taskDeadline").value;
-
-  tasks.push({
-    id: Date.now(),
-    name,
-    assigned,
-    description,
-    deadline,
-    status: "Pending",
-  });
-
-  localStorage.setItem("tasks", JSON.stringify(tasks));
-  renderManagerTask();
+// tambahkan hover effect
+document.querySelectorAll(".task-row").forEach(row => {
+  row.addEventListener("mouseenter", () => row.style.backgroundColor = "#f5f8ff");
+  row.addEventListener("mouseleave", () => row.style.backgroundColor = "transparent");
 });
 
 
-  // === DELETE TASK ===
-  document.querySelectorAll(".delete-btn").forEach(btn => {
+  // add task
+  document.getElementById("taskForm").addEventListener("submit", e => {
+    e.preventDefault();
+    const name = document.getElementById("taskName").value.trim();
+    const assigned = document.getElementById("assignUser").value;
+    const description = document.getElementById("taskDesc").value.trim();
+    const deadline = document.getElementById("taskDeadline").value;
+    if (!name || !assigned) return alert("Title and assignee required.");
+
+    tasks.push({ id: Date.now(), name, assigned, description, deadline, status: "Pending" });
+    localStorage.setItem("tasks", JSON.stringify(tasks));
+    renderManagerTask();
+  });
+
+  // delete task
+  document.querySelectorAll(".del-task").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-
-      tasks = tasks.filter(t => t.id != id);
+      const id = Number(btn.dataset.id);
+      if (!confirm("Delete this task?")) return;
+      tasks = tasks.filter(t => t.id !== id);
       localStorage.setItem("tasks", JSON.stringify(tasks));
-
       renderManagerTask();
     });
   });
 
-  // === EDIT TASK (Modal Popup) ===
-  document.querySelectorAll(".status-btn").forEach(btn => {
+  // edit task -> update status via prompt
+  document.querySelectorAll(".edit-task").forEach(btn => {
     btn.addEventListener("click", () => {
-      const id = btn.dataset.id;
-
-      const newStatus = prompt(
-        "Update Status:\n- Pending\n- On Progress\n- Done"
-      );
-
+      const id = Number(btn.dataset.id);
+      const current = tasks.find(t => t.id === id);
+      if (!current) return;
+      const newStatus = prompt("Update Status (Pending | On Progress | Done):", current.status);
       if (!newStatus) return;
-
-      tasks = tasks.map(t =>
-        t.id == id ? { ...t, status: newStatus } : t
-      );
-
+      current.status = newStatus;
       localStorage.setItem("tasks", JSON.stringify(tasks));
       renderManagerTask();
     });
   });
 }
 
-  // // === ADD TASK ===
-  // document.getElementById("taskForm").addEventListener("submit", e => {
-  //   e.preventDefault();
+// --- EMPLOYEE REPORTS ---
+// --- EMPLOYEE REPORTS ---
+function renderEmployeeReports() {
+  pageTitle.textContent = "Employee Reports";
 
-  //   const name = document.getElementById("taskName").value;
-  //   const assigned = document.getElementById("assignUser").value;
+  const allTasks = JSON.parse(localStorage.getItem("tasks") || "[]");
 
-  //   tasks.push({
-  //     id: Date.now(),
-  //     name,
-  //     assigned,
-  //     status: "Pending"
-  //   });
-
-  //   localStorage.setItem("tasks", JSON.stringify(tasks));
-  //   renderManagerTask();
-  // });
-
-  // // === DELETE TASK ===
-  // document.querySelectorAll(".delete-btn").forEach(btn => {
-  //   btn.addEventListener("click", () => {
-  //     const id = btn.dataset.id;
-
-  //     tasks = tasks.filter(t => t.id != id);
-  //     localStorage.setItem("tasks", JSON.stringify(tasks));
-
-  //     renderManagerTask();
-  //   });
-  // });
-
-  // // === EDIT TASK (STATUS ONLY) ===
-  // document.querySelectorAll(".edit-btn").forEach(btn => {
-  //   btn.addEventListener("click", () => {
-  //     const id = btn.dataset.id;
-
-  //     const newStatus = prompt("Update Status: Pending | On Progress | Done");
-  //     if (!newStatus) return;
-
-  //     tasks = tasks.map(t =>
-  //       t.id == id ? { ...t, status: newStatus } : t
-  //     );
-
-  //     localStorage.setItem("tasks", JSON.stringify(tasks));
-  //     renderManagerTask();
-  //   });
-  // });
-
-
-
-
-// === EMPLOYEE TASK VIEW ===
-function renderEmployeeTask() {
-  pageTitle.textContent = "My Task";
-
-  const myTasks = tasks.filter(t => t.assigned === currentUser.email);
+  // ✅ Task yang DONE dari employee
+  const reports = allTasks.filter(t =>
+    (t.status === "Done" || t.status === "Completed") &&
+    t.proofFileUrl
+  );
 
   content.innerHTML = `
-    <h3>My Tasks</h3>
-    ${myTasks.length === 0 ? "<p>No tasks assigned yet.</p>" : ""}
-    ${myTasks
-      .map(
-        t => `
-      <div class="task-item">
-        <span>${t.name}</span>
-        <select class="task-status" data-id="${t.id}">
-          <option ${t.status === "Pending" ? "selected" : ""}>Pending</option>
-          <option ${t.status === "On Progress" ? "selected" : ""}>On Progress</option>
-          <option ${t.status === "Done" ? "selected" : ""}>Done</option>
-        </select>
-      </div>
-    `
-      )
-      .join("")}
-  `;
+    ${reports.length === 0 
+      ? "<p class='empty' style='padding:12px; text-align:center;'>No reports submitted yet.</p>" 
+      : ""
+    }
 
+    <div class="report-container" style="display:flex; flex-wrap:wrap; gap:16px;">
+      ${reports.map(r => `
+        <div class="pretty-card" style="
+          flex:1 1 280px;
+          padding:20px;
+          border-radius:12px;
+          box-shadow:0 4px 12px rgba(0,0,0,0.08);
+          background-color:#f9faff;
+        ">
+          <div style="display:flex; align-items:center; gap:8px; margin-bottom:12px;">
+            <span style="font-size:20px;">📄</span>
+            <h4 style="margin:0; font-size:16px; color:#1a73e8;">
+              ${escapeHtml(r.name)}
+            </h4>
+          </div>
+
+          <p><strong>Employee:</strong> ${escapeHtml(r.assigned)}</p>
+          <p><strong>Deadline:</strong> ${escapeHtml(r.deadline)}</p>
+
+          <p>
+            <strong>Status:</strong>
+            <span class="status-badge ${badgeClass(r.status)}"
+              style="padding:4px 8px; border-radius:6px;">
+              ${escapeHtml(r.status)}
+            </span>
+          </p>
+
+          <a href="${r.proofFileUrl}" target="_blank"
+            style="
+              display:inline-flex;
+              align-items:center;
+              gap:6px;
+              padding:10px 14px;
+              border-radius:8px;
+              background:#1a73e8;
+              color:#fff;
+              font-weight:bold;
+              text-decoration:none;
+            ">
+            📎 Lihat Bukti
+          </a>
+        </div>
+      `).join("")}
+    </div>
+  `;
+}
+
+
+// --- EMPLOYEE VIEW (for non-manager) ---
+function renderEmployeeTask(){
+  pageTitle.textContent = "My Task";
+  tasks = JSON.parse(localStorage.getItem("tasks") || "[]");
+  const myTasks = tasks.filter(t => t.assigned === currentUser.email);
+
+  if (myTasks.length === 0) {
+    content.innerHTML = "<p class='empty'>No tasks assigned yet.</p>";
+    return;
+  }
+
+  content.innerHTML = myTasks.map(t => `
+    <div class="pretty-card" style="margin-bottom:12px;">
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">
+        <h3 style="margin:0">${escapeHtml(t.name)}</h3>
+        <span class="status-badge ${badgeClass(t.status)}">${escapeHtml(t.status)}</span>
+      </div>
+      <p style="color:var(--muted);margin:6px 0">${escapeHtml(t.description)}</p>
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <select class="task-status" data-id="${t.id}">
+          <option value="Pending"${t.status==='Pending'?' selected':''}>Pending</option>
+          <option value="On Progress"${t.status==='On Progress'?' selected':''}>On Progress</option>
+          <option value="Done"${t.status==='Done'?' selected':''}>Done</option>
+        </select>
+        <button class="delete-btn" data-id="${t.id}">Delete</button>
+      </div>
+    </div>
+  `).join("");
+
+  // bind status change
   document.querySelectorAll(".task-status").forEach(sel => {
     sel.addEventListener("change", e => {
-      const id = e.target.getAttribute("data-id");
+      const id = Number(e.target.dataset.id);
       const newStatus = e.target.value;
-
-      tasks = tasks.map(t => (t.id == id ? { ...t, status: newStatus } : t));
+      tasks = tasks.map(t => t.id === id ? {...t, status: newStatus} : t);
       localStorage.setItem("tasks", JSON.stringify(tasks));
+      renderEmployeeTask();
+    });
+  });
+
+  // delete
+  document.querySelectorAll(".delete-btn").forEach(btn => {
+    btn.addEventListener("click", e => {
+      const id = Number(btn.dataset.id);
+      if (!confirm("Delete this task?")) return;
+      tasks = tasks.filter(t => t.id !== id);
+      localStorage.setItem("tasks", JSON.stringify(tasks));
+      renderEmployeeTask();
     });
   });
 }
 
-// === HELPER: Employee email list ===
-function usersOptionList() {
-  const allUsers = JSON.parse(localStorage.getItem("users") || "[]");
-  const employees = allUsers.filter(u => u.role?.id === 2);
-  return employees.map(u => `<option value="${u.email}">${u.email}</option>`).join("");
+// --- helpers ---
+function badgeClass(status){
+  if (!status) return "badge-pending";
+  const s = status.toLowerCase();
+  if (s.includes("progress")) return "badge-progress";
+  if (s.includes("done")) return "badge-done";
+  return "badge-pending";
+}
+function escapeHtml(str){
+  if (!str) return "";
+  return String(str).replace(/[&<>"'`=\/]/g, function(s){
+    return ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;','/':'&#x2F;','`':'&#x60;','=':'&#x3D;'})[s];
+  });
 }
 
-// === HELPER: Task list render ===
-function renderTaskList() {
-  if (tasks.length === 0) return "<p>No tasks yet.</p>";
-
-  return tasks
-    .map(
-      t => `
-      <div class="task-item">
-        <span>${t.name} — <small>${t.assigned}</small></span>
-        <span class="status">${t.status}</span>
-      </div>
-    `
-    )
-    .join("");
-}
-
-// === DEFAULT USERS (ONLY IF NOT EXIST) ===
-if (!localStorage.getItem("users")) {
-  localStorage.setItem("users", JSON.stringify([
-    { id: 1, email: "manager@mail.com", role: { id: 1, name: "Manager" } },
-    { id: 2, email: "employee@mail.com", role: { id: 2, name: "Employee" } }
-  ]));
-}
-
-// === INITIAL LOAD ===
-if (currentUser.role.id === 1) loadPage("dashboard");
-else loadPage("employeeTask");}
-// Initial load
+// --- initial boot ---
 document.addEventListener("DOMContentLoaded", () => {
+  // build menu only for manager role (simple logic)
   if (currentUser.role.id === 1) {
-    loadPage("dashboard");       // render dashboard
-    setActiveMenu("dashboard");  // tandai menu dashboard aktif
+    buildMenu();
+    // set first item active
+    const first = document.querySelector(".menu-item");
+    if (first) first.classList.add("active");
+    loadPage("dashboard");
   } else {
-    loadPage("employeeTask");    
-    setActiveMenu("employeeTask");
+    // employee view
+    menuList.innerHTML = `<div class="menu-item active" data-page="mytasks"><span class="mi-icon">📋</span><span class="mi-label">My Tasks</span></div>`;
+    loadPage("employeeTask");
   }
 });
